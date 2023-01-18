@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
-"""
-create a web cach
-"""
+""" Redis Module """
+
+from functools import wraps
 import redis
 import requests
-rc = redis.Redis()
-count = 0
+from typing import Callable
+
+redis_ = redis.Redis()
 
 
+def count_requests(method: Callable) -> Callable:
+    """ Decortator for counting """
+    @wraps(method)
+    def wrapper(url):  # sourcery skip: use-named-expression
+        """ Wrapper for decorator """
+        redis_.incr(f"count:{url}")
+        cached_html = redis_.get(f"cached:{url}")
+        if cached_html:
+            return cached_html.decode('utf-8')
+        html = method(url)
+        redis_.setex(f"cached:{url}", 10, html)
+        return html
+
+    return wrapper
+
+
+@count_requests
 def get_page(url: str) -> str:
-    """ get a page and cach value"""
-    rc.set(f"cached:{url}", count)
-    resp = requests.get(url)
-    rc.incr(f"count:{url}")
-    rc.setex(f"cached:{url}", 10, rc.get(f"cached:{url}"))
-    return resp.text
+    """ Obtain the HTML content of a  URL """
+    req = requests.get(url)
+    return req.text
 
 
 if __name__ == "__main__":
